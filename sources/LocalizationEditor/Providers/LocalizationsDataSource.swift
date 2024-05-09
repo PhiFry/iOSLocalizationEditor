@@ -97,7 +97,7 @@ final class LocalizationsDataSource: NSObject {
             return lhs.translations.count > rhs.translations.count
         })
         mainLocalization = localizations.first
-        languagesCount = group.localizations.count
+        languagesCount = localizations.count
 
         data = [:]
         for key in mainLocalization!.translations.map({ $0.key }) {
@@ -134,13 +134,13 @@ final class LocalizationsDataSource: NSObject {
         os_log("Filtering by %@", type: OSLogType.debug, "\(filter)")
 
         // first use filter, missing translation is a translation that is missing in any language for the given key
-        let data = filter == .all ? self.data: self.data.filter({ dict in
+        let data = filter == .all ? self.data : self.data.filter({ dict in
             return dict.value.keys.count != self.languagesCount || !dict.value.values.allSatisfy({ $0?.value.isEmpty == false })
         })
 
         // no search string, just use teh filtered data
         guard let searchString = searchString, !searchString.isEmpty else {
-            filteredKeys = data.keys.map({ $0 }).sorted(by: { $0<$1 })
+            filteredKeys = data.keys.map({ $0 }).sorted(by: { $0 < $1 })
             return
         }
 
@@ -161,11 +161,11 @@ final class LocalizationsDataSource: NSObject {
         }
 
         // sorting because the dictionary does not keep the sort
-        filteredKeys = keys.sorted(by: { $0<$1 })
+        filteredKeys = keys.sorted(by: { $0 < $1 })
     }
 
     /**
-     Gets key for speficied row
+     Gets key for specified row
 
      - Parameter row: row number
      - Returns: key if valid
@@ -181,11 +181,13 @@ final class LocalizationsDataSource: NSObject {
      - Returns: message if any
      */
     func getMessage(row: Int) -> String? {
-        guard let key = getKey(row: row), let part = data[key], let firstKey = part.keys.map({ $0 }).first  else {
+        guard let key = getKey(row: row), let part = data[key], let languageKey = mainLocalization?.language else {
             return nil
         }
-
-        return part[firstKey]??.message
+        guard let message = part[languageKey]??.message, !message.contains("\n ") else {
+            return nil
+        }
+        return message
     }
 
     /**

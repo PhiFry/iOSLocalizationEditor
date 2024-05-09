@@ -9,6 +9,14 @@
 import Foundation
 
 extension String {
+    func slice(from fromString: String, to toString: String) -> String? {
+        return (range(of: fromString)?.upperBound).flatMap { substringFrom in
+            (range(of: toString, range: substringFrom..<endIndex)?.lowerBound).map { substringTo in
+                String(self[substringFrom..<substringTo])
+            }
+        }
+    }
+
     var normalized: String {
         return folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
     }

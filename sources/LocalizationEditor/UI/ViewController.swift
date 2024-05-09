@@ -47,6 +47,7 @@ final class ViewController: NSViewController {
     private var currentSearchTerm: String = ""
     private let dataSource = LocalizationsDataSource()
     private var presendedAddViewController: AddViewController?
+    private var currentOpenFolderUrl: URL?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -125,20 +126,21 @@ final class ViewController: NSViewController {
         tableView.reloadData()
     }
 
-    private func openFolder(forPath path: String? = nil) {
-        let handleOpenFolder: (URL) -> Void = { url in
-            self.progressIndicator.startAnimation(self)
-            self.dataSource.load(folder: url) { [unowned self] languages, title, localizationFiles in
-                self.reloadData(with: languages, title: title)
-                self.progressIndicator.stopAnimation(self)
+    private func handleOpenFolder(_ url: URL) {
+        self.progressIndicator.startAnimation(self)
+        self.dataSource.load(folder: url) { [unowned self] languages, title, localizationFiles in
+            self.currentOpenFolderUrl = url
+            self.reloadData(with: languages, title: title)
+            self.progressIndicator.stopAnimation(self)
 
-                if let title = title {
-                    self.delegate?.shouldSetLocalizationGroups(groups: localizationFiles)
-                    self.delegate?.shouldSelectLocalizationGroup(title: title)
-                }
+            if let title = title {
+                self.delegate?.shouldSetLocalizationGroups(groups: localizationFiles)
+                self.delegate?.shouldSelectLocalizationGroup(title: title)
             }
         }
+    }
 
+    private func openFolder(forPath path: String? = nil) {
         if let path = path {
             handleOpenFolder(URL(fileURLWithPath: path))
             return
@@ -153,7 +155,7 @@ final class ViewController: NSViewController {
             guard result.rawValue == NSApplication.ModalResponse.OK.rawValue, let url = openPanel.url else {
                 return
             }
-            handleOpenFolder(url)
+            self.handleOpenFolder(url)
         }
     }
 }
@@ -193,6 +195,49 @@ extension ViewController: NSTableViewDelegate {
 extension ViewController: LocalizationCellDelegate {
     func userDidUpdateLocalizationString(language: String, key: String, with value: String, message: String?) {
         dataSource.updateLocalization(language: language, key: key, with: value, message: message)
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) {
+        guard let view = obj.object as? NSView, let textMovementInt = obj.userInfo?["NSTextMovement"] as? Int, let textMovement = NSTextMovement(rawValue: textMovementInt) else {
+            return
+        }
+
+        let columnIndex = tableView.column(for: view)
+        let rowIndex = tableView.row(for: view)
+
+        let newRowIndex: Int
+        let newColumnIndex: Int
+
+        switch textMovement {
+        case .tab:
+            if columnIndex + 1 >= tableView.numberOfColumns - 1 {
+                newRowIndex = rowIndex + 1
+                newColumnIndex = 1
+            } else {
+                newColumnIndex = columnIndex + 1
+                newRowIndex = rowIndex
+            }
+            if newRowIndex >= tableView.numberOfRows {
+                return
+            }
+        case .backtab:
+            if columnIndex - 1 <= 0 {
+                newRowIndex = rowIndex - 1
+                newColumnIndex = tableView.numberOfColumns - 2
+            } else {
+                newColumnIndex = columnIndex - 1
+                newRowIndex = rowIndex
+            }
+            if newRowIndex < 0 {
+                return
+            }
+        default:
+            return
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            self?.tableView.editColumn(newColumnIndex, row: newRowIndex, with: nil, select: true)
+        }
     }
 }
 
@@ -272,6 +317,17 @@ extension ViewController: WindowControllerToolbarDelegate {
      */
     func userDidRequestFolderOpen(withPath path: String) {
         openFolder(forPath: path)
+    }
+
+    /**
+     Invoked when user requests reload selected folder
+     */
+    func userDidRequestReloadData() {
+        guard let currentOpenFolderUrl = currentOpenFolderUrl else {
+            return
+        }
+        handleOpenFolder(currentOpenFolderUrl)
+
     }
 }
 
